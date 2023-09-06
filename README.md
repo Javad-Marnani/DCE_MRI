@@ -34,6 +34,7 @@ The dataset can be accessed through this link: [Dataset Link](https://wiki.cance
      - One vs. the rest classifications (4 OvR classifications)
      - One vs. one classifications (6 OvO classifications)
      
-Finally, we want to apply the same methodology for the extracted radiomics features by Saha et al. and make comparisons.[Saha et al. - British Journal of Cancer](https://www.nature.com/articles/s41416-018-0185-8)
+   Finally, we want to apply the same methodology for the extracted radiomics features by Saha et al. and make comparisons.
+   [Saha et al. - British Journal of Cancer](https://www.nature.com/articles/s41416-018-0185-8)
 
-8. Make any necessary modifications to paths and directories within the code files.
+9. Make any necessary modifications to paths and directories within the code files.
