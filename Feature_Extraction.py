@@ -1,96 +1,113 @@
-# # - - - - - - - - - - - - Settings - - - - - - - - - - - - -
-#If you have access to a GPU, you might want to modify the GPU_ variable to True.
-GPU_ = False
-create_directory=True
-import os
-from platform import python_version
-# Get the current directory
-current_path = os.getcwd()
-print("Current path is:", current_path)
-# Name of the new directory
-new_directory = "BC_MRI"
-if create_directory:
-#if not os.path.exists(new_directory):
-  os.mkdir(new_directory)
-  # Change the current working directory to the new directory
-  os.chdir(new_directory)
-  create_directory=False
-print("New directory created successfully. Current path after changing directory:", new_directory)
-print("Python version is: ",python_version())
-# # - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-print("please put the requirements.txt in the created directory BC_MRI")
-
-pip install -r requirements.txt
-
-import pandas as pd
-import numpy as np
-import tensorflow as tf
-import sklearn
-import collections
-from tqdm import tqdm
-from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import SelectKBest
-from sklearn.metrics import f1_score, make_scorer, confusion_matrix
-from keras.models import Sequential
-from keras.layers import Dense, Activation, Dropout
-from keras.callbacks import EarlyStopping
-from sklearn.model_selection import GridSearchCV
-from sklearn.impute import KNNImputer
-from tensorflow.keras.utils import to_categorical
-import scipy.io as sio
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from sklearn import datasets, metrics
-from sklearn.model_selection import validation_curve, train_test_split, KFold, cross_val_score, GridSearchCV
-from sklearn.metrics import accuracy_score, classification_report, precision_score, recall_score, average_precision_score
-import time
-import random
-import tensorflow as tf
-import math
-from sklearn import svm
-from sklearn.ensemble import RandomForestClassifier
-import seaborn as sns
-from sklearn.decomposition import PCA
-import glob
-import cv2 as cv
-from PIL import Image
-import PIL.Image as PILImage
-from sklearn.model_selection import StratifiedKFold
+#pip install -r requirements.txt
+#!pip install pydicom
+#!pip install patool
+#!pip install pyunpack
+#!pip install pyfeats
+##########################################################################################
+#####################################   IMPORTS    #######################################
+##########################################################################################
 import os
 import re
+import math
+import time
+import glob
+import random
+import sklearn
+import pyfeats
 import pydicom
 import patoolib
-from platform import python_version
-from pyunpack import Archive
-from skimage.io import imsave, imread
-from IPython.display import Image, display
-from random import choice
+import operator
+import mahotas
+import cv2 as cv
 import collections
-import pyfeats
-from pyfeats import fos, glcm_features, glds_features, ngtdm_features, sfm_features, lte_measures, fdta, glrlm_features
-from pyfeats import fps, shape_parameters, glszm_features, hos_features, lbp_features, grayscale_morphology_features
-from pyfeats import multilevel_binary_morphology_features, histogram, multiregion_histogram, fdta, amfm_features
-from pyfeats import dwt_features, gt_features, zernikes_moments, hu_moments, hog_features
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from tqdm import tqdm
+from PIL import Image
+import scipy.io as sio
+import tensorflow as tf
+from scipy.stats import t
+from random import choice
+from statistics import mode
+from pyunpack import Archive
+import matplotlib.pyplot as plt
+#from keras.models import Sequential
+from platform import python_version
+import matplotlib.patches as patches
+from sklearn.decomposition import PCA
+from skimage.io import imsave, imread
+from sklearn.impute import KNNImputer
+#from keras.callbacks import EarlyStopping
+from IPython.display import Image, display
+from sklearn import datasets, metrics, svm
+from collections import Counter, defaultdict
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import SelectKBest
+#from tensorflow.keras.utils import to_categorical
+#from keras.layers import Dense, Activation, Dropout
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.metrics import (
+    f1_score, make_scorer, confusion_matrix, accuracy_score, classification_report,
+    precision_score, recall_score, average_precision_score
+)
+from sklearn.model_selection import (
+    GridSearchCV, validation_curve, train_test_split, KFold, cross_val_score,
+    StratifiedKFold
+)
+from pyfeats import (
+    fos, glcm_features, glds_features, ngtdm_features, sfm_features, lte_measures, fdta, glrlm_features,
+    fps, shape_parameters, glszm_features, hos_features, lbp_features, grayscale_morphology_features,
+    multilevel_binary_morphology_features, histogram, multiregion_histogram, amfm_features,
+    dwt_features, gt_features, zernikes_moments, hu_moments, hog_features
+)
 
+
+##########################################################################################
+####################################   SETTINGS    #######################################
+##########################################################################################
+_GPU = False
+
+##########################################################################################
+######################################   TEMP    #########################################
+##########################################################################################
+pd.set_option('display.max_columns', None)
+
+##########################################################################################
+#################################   SETTINGS EXEC    #####################################
+##########################################################################################
 '''Choose GPU 0 or 1 if they are available for processing.'''
-if GPU_:
+if _GPU:
 	physical_devices = tf.config.list_physical_devices('GPU')
 	tf.config.experimental.set_memory_growth(physical_devices[1], True)
 	tf.config.set_visible_devices(physical_devices[1], 'GPU')
 	visible_devices = tf.config.get_visible_devices('GPU')
 	print(visible_devices)
 
-#Create new directories within the current directory of BC_MRI for better organization
-directories_to_check = ["dataset", "extracted_features", "resized_images"]
-# Iterate over the directories and create them if they don't exist
-current_path_=os.getcwd()
-for directory in directories_to_check:
-    directory_path = os.path.join(current_path_, directory)
-    if not os.path.exists(directory_path):
-        os.mkdir(directory_path)
 
-print("Please ensure that you have placed four CSV files into the 'dataset' directory before running the process.")
+##########################################################################################
+################################   DIRECTORY HANDLER    ##################################
+##########################################################################################
+# current_path = os.path.dirname(os.path.abspath(__file__))
+current_path = os.getcwd()
+bc_mri_path = current_path + '/BC_MRI'
+dataset_path = bc_mri_path + '/dataset'
+csv_files_path = bc_mri_path + '/CSV_Files'
+samples_path = dataset_path + '/Duke-Breast-Cancer-MRI'
+clinical_file_path = csv_files_path + '/Clinical_and_Other_Features.csv'
+mapping_path = csv_files_path + '/Breast-Cancer-MRI-filepath_filename-mapping.csv'
+boxes_path = csv_files_path + '/Annotation_Boxes.csv'
+types = ['pre', 'post_1', 'post_2', 'post_3']
+
+directories_to_check = ["dataset", "extracted_features", "resized_images", "CSV_Files"]
+for folder in directories_to_check:
+    folder_path = os.path.join(bc_mri_path, folder)
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+print("Please ensure that you have placed four CSV files into the 'CSV_Files' directory before running the process.")
 
 def random_sample_for_each_cancer_type(path, N0=2, N1=2, N2=2, N3=2,
                                       exclude=[103,164,253,258,282,700,728,801,893],
@@ -158,7 +175,7 @@ def random_sample_for_each_cancer_type(path, N0=2, N1=2, N2=2, N3=2,
     return list0, list1, list2, list3
 
 # Set the path to the clinical features file
-path ='dataset/Clinical_and_Other_Features.csv'
+path =clinical_file_path
 # Call the function to generate random samples for each cancer type
 list0, list1, list2, list3 = random_sample_for_each_cancer_type(path)
 
@@ -169,40 +186,9 @@ list_ = list0 + list1 + list2 + list3
 print("The total sample size is:", len(list_))
 
 # Print the selected patients
-print("Please download the following patient folders and after converting the folder Duke-Breast-Cancer-MRI to RAR,\nput the rar file in dataset directory:")
+print("Please download the following patient folders and put the folder Duke-Breast-Cancer-MRI in dataset directory:")
 for folder in sorted(list_):
     print(folder)
-
-print("if you cannot upload Duke-Breast-Cancer-MRI.rar directly in dataset directory, use Google drive to do so.")
-
-from google.colab import drive
-# Mount Google Drive
-drive.mount('/content/drive')
-
-# Path to the target directory in Colab
-target_directory = 'dataset'
-
-# Path to the RAR file in Google Drive
-rar_file_path = '/content/drive/MyDrive/Duke-Breast-Cancer-MRI.rar'
-
-# Copy the RAR file to the target directory in Colab
-!cp "{rar_file_path}" "{target_directory}"
-
-print('RAR file uploaded successfully!')
-
-#Extract the Duke-Breast-Cancer-MRI.rar and put the extracted file in dataset directory
-current_path = os.getcwd()
-archive_file = 'Duke-Breast-Cancer-MRI.rar'
-extracted_file='Duke-Breast-Cancer-MRI'
-dataset_directory = os.path.join(current_path, 'dataset')
-# Check if the RAR file has already been extracted
-if not os.path.exists(os.path.join(dataset_directory, extracted_file)):
-    # Extract the RAR file to the dataset directory
-    patoolib.extract_archive(os.path.join(dataset_directory, archive_file), outdir=dataset_directory)
-    print("Extraction completed.")
-else:
-    print("Extraction has already been done before.")
-
 
 def filter_mapping_df(mapping_path, list_,seq_type):
     """
@@ -216,8 +202,6 @@ def filter_mapping_df(mapping_path, list_,seq_type):
     Returns:
         pandas.DataFrame, one filtered DataFrames based on sequence type ('pre', 'post_1', 'post_2', 'post_3').
     """
-    # Set the proper directory to navigate to 'filepath_filename-mapping.csv'
-    #mapping_path ='DATA/Breast-Cancer-MRI-filepath_filename-mapping.csv'
     mapping_df = pd.read_csv(mapping_path)
     mapping_df_seq = pd.DataFrame()
 
@@ -243,7 +227,7 @@ def save_dcm_slice(dcm_fname, label, vol_idx, seq_type):
     # Create a path to save the slice .png file, based on the original DICOM filename, target label, and sequence type
     png_path = dcm_fname.split('/')[-1].replace('.dcm', '-{}-{}.png'.format(seq_type, vol_idx))
     label_dir = 'pos' if label == 1 else 'neg'
-    target_png_dir = 'dataset/target_{}'.format(seq_type)
+    target_png_dir = dataset_path+'/target_{}'.format(seq_type)
     png_path = os.path.join(target_png_dir, label_dir, png_path)
 
     if not os.path.exists(os.path.join(target_png_dir, label_dir)):
@@ -335,14 +319,11 @@ def process_mapping_df(data_path, mapping_path,boxes_path, mapping_df, seq_type,
             save_dcm_slice(dcm_fname, 0, vol_idx, seq_type)
             ct_negative += 1
 
-data_path='dataset'
-mapping_path ='dataset/Breast-Cancer-MRI-filepath_filename-mapping.csv'
-boxes_path ='dataset/Annotation_Boxes.csv'
-types = ['pre', 'post_1', 'post_2', 'post_3']
 for seq_type in types:
     print("Processing", seq_type, "contrast sequence ")
-    mapping_df=filter_mapping_df(mapping_path, list_,seq_type)
-    process_mapping_df(data_path, mapping_path,boxes_path, mapping_df, seq_type)
+    mapping_df=filter_mapping_df(mapping_path, list_, seq_type)
+    process_mapping_df(dataset_path, mapping_path, boxes_path, mapping_df, seq_type)
+   
 
 def image_filenames_plot_one_at_random(seq_type='pre', label='pos', show=False):
     """
@@ -356,7 +337,7 @@ def image_filenames_plot_one_at_random(seq_type='pre', label='pos', show=False):
     Returns:
         list: List of image filenames in the specified directory.
     """
-    target_png_dir = 'dataset/target_{}'.format(seq_type)
+    target_png_dir = dataset_path+'/target_{}'.format(seq_type)
     image_dir = os.path.join(target_png_dir, label)
     image_filenames = os.listdir(image_dir)
     sample_image_path = os.path.join(image_dir, choice(image_filenames))
@@ -488,7 +469,7 @@ def process_paths(seq_type='pre', label='pos', show=False):
 
     counter = 1
     patient_slices=count_patient_slices(seq_type, label)
-    target_png_dir = 'dataset/target_{}'.format(seq_type)
+    target_png_dir = dataset_path + '/target_{}'.format(seq_type)
     image_dir = os.path.join(target_png_dir, label)
     image_filenames = os.listdir(image_dir)
     patients=patients_number(seq_type, label)
@@ -590,7 +571,6 @@ def sort_paths(seq_type='pre', label='pos'):
         sorted_path.append(p)
     return sorted_path
 
-from PIL import Image
 def plot_cropped_images(boxes_path,seq_type='pre', label='pos', show=False):
     """
     Plot cropped images with bounding boxes.
@@ -639,8 +619,8 @@ def plot_cropped_images(boxes_path,seq_type='pre', label='pos', show=False):
         else:
             plt.close()
             break
+from PIL import Image
 
-boxes_path ='dataset/Annotation_Boxes.csv'
 plot_cropped_images(boxes_path,seq_type='pre', label='pos', show=False)
 
 def crop_and_save_images(boxes_path,seq_type='pre',crop='original', label='pos', show=False):
@@ -695,7 +675,7 @@ def crop_and_save_images(boxes_path,seq_type='pre',crop='original', label='pos',
 
         if type(crop)==int:
             crop=str(crop)
-        output_directory='resized_images/'+seq_type+'_'+crop
+        output_directory=bc_mri_path+'/resized_images/'+seq_type+'_'+crop
         if not os.path.exists(output_directory):
             os.makedirs(output_directory)
         if crop!='original':
@@ -711,8 +691,7 @@ def crop_and_save_images(boxes_path,seq_type='pre',crop='original', label='pos',
 
     print("Cropping and saving completed.")
 
-boxes_path ='dataset/Annotation_Boxes.csv'
-for seq_type in tqdm(['pre','post_1','post_2','post_3']):
+for seq_type in tqdm(['pre', 'post_1', 'post_2', 'post_3']):
     for crop in  tqdm(['original',32,64]):
         crop_and_save_images(boxes_path,seq_type, crop,label='pos', show=False)
 
@@ -738,7 +717,7 @@ def extract_pixels(seq_type='pre',crop='original'):
     pixel = np.zeros((n, img_size, img_size), dtype=np.int16, order="F")
     for i in range(n):
         # Construct the path using the crop and seq_type arguments
-        path = f"resized_images/{seq_type}_{crop}/img_{seq_type}_{str(i).zfill(4)}.png"
+        path = f"{bc_mri_path}/resized_images/{seq_type}_{crop}/img_{seq_type}_{str(i).zfill(4)}.png"
         pixel[i, :, :] = cv.imread(path, 0)
     return pixel
 
@@ -746,6 +725,7 @@ def extract_pixels(seq_type='pre',crop='original'):
 pixel = extract_pixels(seq_type='post_2',crop='original')
 # Print the shape of the pixel matrix
 print(np.shape(pixel))
+
 
 def plot_images(seq_type='pre',crop='original', num_images=100):
     """
@@ -1037,12 +1017,12 @@ for seq_type in tqdm(['pre','post_1','post_2','post_3']):
         D=D[~all_zeros]
         print("Total number of missing values:",D.isnull().sum().sum())
         # Write the data and save that as scv
-        filename = f"extracted_features/{seq_type.capitalize()}_{str(crop).capitalize()}.csv"
+        filename = f"{bc_mri_path}/extracted_features/{seq_type.capitalize()}_{str(crop).capitalize()}.csv"
         D.to_csv(filename, header=True)
 
-# Load the CSV file 'Pre_Original.csv' into a pandas DataFrame
-D = pd.read_csv('extracted_features/Pre_Original.csv')
-# Remove the first column from the DataFrame
+#Load the CSV file 'Pre_Original.csv' into a pandas DataFrame
+D = pd.read_csv(bc_mri_path+'/extracted_features/Pre_Original.csv')
+#Remove the first column from the DataFrame
 D = D.iloc[:, 1:]
-# Display the updated DataFrame
+#Display the updated DataFrame
 D
