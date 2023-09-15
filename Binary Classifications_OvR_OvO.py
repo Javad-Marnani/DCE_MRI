@@ -1,48 +1,101 @@
-import pandas as pd
-import numpy as np
-import tensorflow as tf
-import sklearn
-from tqdm import tqdm
-from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import SelectKBest
-from sklearn.metrics import f1_score, make_scorer, confusion_matrix
-from keras.models import Sequential
-from keras.layers import Dense, Activation, Dropout
-from keras.callbacks import EarlyStopping
-# from keras.wrappers.scikit_learn import KerasClassifier
-from sklearn.model_selection import GridSearchCV, train_test_split, KFold, cross_val_score
-from sklearn.impute import KNNImputer
-from statistics import mode
-from tensorflow.keras.utils import to_categorical
-import scipy.io as sio
-import matplotlib.pyplot as plt
-from sklearn import datasets, metrics, svm
-from sklearn.ensemble import RandomForestClassifier
-import seaborn as sns
-from scipy.stats import t
-from statistics import mode
-from sklearn.decomposition import PCA
-import glob
-import cv2 as cv
-from PIL import Image
-from platform import python_version
-from sklearn.model_selection import StratifiedKFold
 import os
-import random
-import pydicom
-from skimage.io import imsave, imread
+import re
 import math
+import time
+import glob
+import random
+import sklearn
+import pyfeats
+import pydicom
+import patoolib
+import operator
+import cv2 as cv
+import collections
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from tqdm import tqdm
+from PIL import Image
+import scipy.io as sio
+import tensorflow as tf
+from scipy.stats import t
+from random import choice
+from statistics import mode
+from pyunpack import Archive
+import matplotlib.pyplot as plt
+from keras.models import Sequential
+from platform import python_version
+import matplotlib.patches as patches
+from sklearn.decomposition import PCA
+from skimage.io import imsave, imread
+from sklearn.impute import KNNImputer
+from keras.callbacks import EarlyStopping
+from IPython.display import Image, display
+from sklearn import datasets, metrics, svm
+from collections import Counter, defaultdict
+from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest
-from sklearn.metrics import f1_score, make_scorer
-from sklearn.metrics import confusion_matrix
-from sklearn.neighbors import LocalOutlierFactor
+from tensorflow.keras.utils import to_categorical
+from keras.layers import Dense, Activation, Dropout
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RandomizedSearchCV
-from sklearn.metrics import f1_score, make_scorer, confusion_matrix, classification_report
-import time
+from sklearn.metrics import (
+    f1_score, make_scorer, confusion_matrix, accuracy_score, classification_report,
+    precision_score, recall_score, average_precision_score
+)
+from sklearn.model_selection import (
+    GridSearchCV, validation_curve, train_test_split, KFold, cross_val_score,
+    StratifiedKFold
+)
+from pyfeats import (
+    fos, glcm_features, glds_features, ngtdm_features, sfm_features, lte_measures, fdta, glrlm_features,
+    fps, shape_parameters, glszm_features, hos_features, lbp_features, grayscale_morphology_features,
+    multilevel_binary_morphology_features, histogram, multiregion_histogram, amfm_features,
+    dwt_features, gt_features, zernikes_moments, hu_moments, hog_features
+)
+
+
+##########################################################################################
+####################################   SETTINGS    #######################################
+##########################################################################################
+_GPU = False
+
+##########################################################################################
+######################################   TEMP    #########################################
+##########################################################################################
+pd.set_option('display.max_columns', None)
+
+##########################################################################################
+#################################   SETTINGS EXEC    #####################################
+##########################################################################################
+'''Choose GPU 0 or 1 if they are available for processing.'''
+if _GPU:
+	physical_devices = tf.config.list_physical_devices('GPU')
+	tf.config.experimental.set_memory_growth(physical_devices[1], True)
+	tf.config.set_visible_devices(physical_devices[1], 'GPU')
+	visible_devices = tf.config.get_visible_devices('GPU')
+	print(visible_devices)
+
+
+##########################################################################################
+################################   DIRECTORY HANDLER    ##################################
+##########################################################################################
+# current_path = os.path.dirname(os.path.abspath(__file__))
+current_path = os.getcwd()
+bc_mri_path = current_path + '/BC_MRI'
+dataset_path = bc_mri_path + '/dataset'
+radiomics_clinical_path=bc_mri_path+'/extracted_features/radiomics_clinical_features_data.csv'
+csv_files_path = bc_mri_path + '/CSV_Files'
+samples_path = dataset_path + '/Duke-Breast-Cancer-MRI'
+clinical_file_path = bc_mri_path + '/Clinical_and_Other_Features.csv'
+mapping_path = csv_files_path + '/Breast-Cancer-MRI-filepath_filename-mapping.csv'
+boxes_path = csv_files_path + '/Annotation_Boxes.csv'
+types = ['pre', 'post_1', 'post_2', 'post_3']
+
 
 # Read the CSV file 'radiomics_clinical_features_data.csv' and store the data in the 'data' variable
-data = pd.read_csv('extracted_features/radiomics_clinical_features_data.csv')
+data = pd.read_csv(radiomics_clinical_path)
 # Select all rows and columns starting from index 1 (excluding the first column)
 data = data.iloc[:, 1:]
 data
@@ -196,8 +249,8 @@ def convert_label_one_vs_one(data, subtype_1, subtype_2):
 ############################  k_fold_cv=10, random_search_cv=5  ###############################
 ######################################################################
 ######################################################################
-def evaluate_classifier(X, y, k_fold_cv=2, random_search_cv=2, n_iter=5,
-                        max_features=5, classifier='None',n_neighbors_impute=1,n_neighbors_LOF=1,
+def evaluate_classifier(X, y, k_fold_cv=10, random_search_cv=5, n_iter=200,
+                        max_features=150, classifier='None',n_neighbors_impute=10,n_neighbors_LOF=10,
                         hyperparameters=None,random_state=42):
     """
     Evaluate a classifier's performance on given data.
@@ -330,8 +383,9 @@ def evaluate_classifier(X, y, k_fold_cv=2, random_search_cv=2, n_iter=5,
 #        subtype="TN"
 #    print(subtype, "vs. the rest classification using",classifier)
 #    X,Y= convert_label_one_vs_the_rest(data, i)
-#    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X,Y,n_iter=5,
-#                        max_features=5,k_fold_cv=2,classifier=classifier, hyperparameters=hyperparameters)
+#    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X, Y, k_fold_cv=2, random_search_cv=2, n_iter=5,
+#                        max_features=5, classifier=classifier, hyperparameters=hyperparameters,n_neighbors_impute=1,n_neighbors_LOF=1,
+#                        random_state=42)
 #    print('max_test_scores:\n',max_test_score)
 #    print('optimal_features:\n',optimal_features)
 #    print('optimal_num_features:\n',optimal_num_features)
@@ -365,8 +419,9 @@ for i in tqdm(range(0,4)):
         subtype="TN"
     print(subtype, "vs. the rest classification using",classifier)
     X,Y= convert_label_one_vs_the_rest(data, i)
-    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X,Y,n_iter=50,
-                        max_features=5,k_fold_cv=2,classifier=classifier, hyperparameters=hyperparameters)
+    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X, Y, k_fold_cv=2, random_search_cv=2, n_iter=5,
+                        max_features=5, classifier=classifier, hyperparameters=hyperparameters,n_neighbors_impute=1,n_neighbors_LOF=1,
+                        random_state=42)
     print('max_test_scores:\n',max_test_score)
     print('optimal_features:\n',optimal_features)
     print('optimal_num_features:\n',optimal_num_features)
@@ -394,8 +449,9 @@ for i in tqdm(range(0,4)):
 #for subtype_1, subtype_2 in classification_cases:
 #    print(subtype_1, "vs.",subtype_2,"classification using",classifier)
 #    X,Y= convert_label_one_vs_one(data,subtype_1,subtype_2 )
-#    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X,Y,n_iter=5,
-#                        max_features=5,k_fold_cv=2,classifier=classifier, hyperparameters=hyperparameters)
+#    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X, Y, k_fold_cv=2, random_search_cv=2, n_iter=5,
+#                        max_features=5, classifier=classifier, hyperparameters=hyperparameters,n_neighbors_impute=1,n_neighbors_LOF=1,
+#                        random_state=42)
 #    print('max_test_scores:\n',max_test_score)
 #    print('optimal_features:\n',optimal_features)
 #    print('optimal_num_features:\n',optimal_num_features)
@@ -427,8 +483,9 @@ for i in tqdm(range(0,4)):
 #for subtype_1, subtype_2 in classification_cases:
 #    print(subtype_1, "vs.",subtype_2,"classification using",classifier)
 #    X,Y= convert_label_one_vs_one(data,subtype_1,subtype_2 )
-#    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X,Y,n_iter=5,
-#                        max_features=5,k_fold_cv=2,classifier=classifier, hyperparameters=hyperparameters)
+#    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X, Y, k_fold_cv=2, random_search_cv=2, n_iter=5,
+#                        max_features=5, classifier=classifier, hyperparameters=hyperparameters,n_neighbors_impute=1,n_neighbors_LOF=1,
+#                        random_state=42)
 #    print('max_test_scores:\n',max_test_score)
 #    print('optimal_features:\n',optimal_features)
 #    print('optimal_num_features:\n',optimal_num_features)
@@ -440,3 +497,4 @@ for i in tqdm(range(0,4)):
 #    confidence_interval(max_test_score)
 #    print("C.I for the mean of optimal_num_features:\n")
 #    confidence_interval(optimal_num_features)
+

@@ -1,98 +1,211 @@
-import pandas as pd
-import numpy as np
-import tensorflow as tf
+import os
+import re
+import math
+import time
+import glob
+import random
 import sklearn
+import pyfeats
+import pydicom
+import patoolib
+import operator
+import cv2 as cv
+import collections
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from tqdm import tqdm
+from PIL import Image
+import scipy.io as sio
+import tensorflow as tf
+from scipy.stats import t
+from random import choice
+from statistics import mode
+from pyunpack import Archive
+import matplotlib.pyplot as plt
+from keras.models import Sequential
+from platform import python_version
+import matplotlib.patches as patches
+from sklearn.decomposition import PCA
+from skimage.io import imsave, imread
+from sklearn.impute import KNNImputer
+from keras.callbacks import EarlyStopping
+from IPython.display import Image, display
+from sklearn import datasets, metrics, svm
+from collections import Counter, defaultdict
+from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest
-from sklearn.metrics import f1_score, make_scorer
-from keras.models import Sequential
-from keras.layers import Dense, Activation, Dropout
-from keras.callbacks import EarlyStopping
-# from keras.wrappers.scikit_learn import KerasClassifier
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import f1_score, confusion_matrix
-from sklearn.impute import KNNImputer
 from tensorflow.keras.utils import to_categorical
-import scipy.io as sio
-import matplotlib.pyplot as plt
-from sklearn import datasets
-import pandas as pd
-from sklearn.model_selection import validation_curve
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn import metrics
-from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV
-from sklearn.metrics import accuracy_score, classification_report, precision_score, recall_score,confusion_matrix, average_precision_score
-import time
-import random
-from sklearn import svm
+from keras.layers import Dense, Activation, Dropout
 from sklearn.ensemble import RandomForestClassifier
-import seaborn as sns
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-import glob
-import cv2 as cv
-from PIL import Image
-from sklearn.model_selection import StratifiedKFold, KFold, cross_val_score
-from sklearn.metrics import confusion_matrix
-import seaborn as sns
-import os
-import pydicom
-from platform import python_version
-from tqdm import tqdm
-from skimage.io import imsave
-from skimage.io import imread
+from sklearn.model_selection import RandomizedSearchCV
+from sklearn.metrics import (
+    f1_score, make_scorer, confusion_matrix, accuracy_score, classification_report,
+    precision_score, recall_score, average_precision_score
+)
+from sklearn.model_selection import (
+    GridSearchCV, validation_curve, train_test_split, KFold, cross_val_score,
+    StratifiedKFold
+)
+from pyfeats import (
+    fos, glcm_features, glds_features, ngtdm_features, sfm_features, lte_measures, fdta, glrlm_features,
+    fps, shape_parameters, glszm_features, hos_features, lbp_features, grayscale_morphology_features,
+    multilevel_binary_morphology_features, histogram, multiregion_histogram, amfm_features,
+    dwt_features, gt_features, zernikes_moments, hu_moments, hog_features
+)
 
-# Importing functions for sampling
-from Feature_Extraction import random_sample_for_each_cancer_type
 
-# Set the path to the clinical features file
-path = 'dataset/Clinical_and_Other_Features.csv'
+##########################################################################################
+####################################   SETTINGS    #######################################
+##########################################################################################
+_GPU = False
+
+##########################################################################################
+######################################   TEMP    #########################################
+##########################################################################################
+pd.set_option('display.max_columns', None)
+
+##########################################################################################
+#################################   SETTINGS EXEC    #####################################
+##########################################################################################
+'''Choose GPU 0 or 1 if they are available for processing.'''
+if _GPU:
+	physical_devices = tf.config.list_physical_devices('GPU')
+	tf.config.experimental.set_memory_growth(physical_devices[1], True)
+	tf.config.set_visible_devices(physical_devices[1], 'GPU')
+	visible_devices = tf.config.get_visible_devices('GPU')
+	print(visible_devices)
+
+
+##########################################################################################
+################################   DIRECTORY HANDLER    ##################################
+##########################################################################################
+# current_path = os.path.dirname(os.path.abspath(__file__))
+current_path = os.getcwd()
+bc_mri_path = current_path + '/BC_MRI'
+dataset_path = bc_mri_path + '/dataset'
+csv_files_path = bc_mri_path + '/CSV_Files'
+samples_path = dataset_path + '/Duke-Breast-Cancer-MRI'
+clinical_file_path = csv_files_path + '/Clinical_and_Other_Features.csv'
+mapping_path = csv_files_path + '/Breast-Cancer-MRI-filepath_filename-mapping.csv'
+boxes_path = csv_files_path + '/Annotation_Boxes.csv'
+types = ['pre', 'post_1', 'post_2', 'post_3']
 
 # Call the function to generate random samples for each cancer type
 # note that the random_seed should be the same as the one you already used
+#from Feature_Extraction import random_sample_for_each_cancer_type 
+def random_sample_for_each_cancer_type(path, N0=2, N1=2, N2=2, N3=2,
+                                      exclude=[103,164,253,258,282,700,728,801,893],
+                                      random_seed =42, show_patients=False):
+    """
+    Generate random samples for each cancer type using the labels obtained from clinical features.
+
+    Args:
+        path (str): The path to the clinical features file.
+        N0 (int): The maximum number of samples to select for cancer type 0. Default is 50.
+        N1 (int): The maximum number of samples to select for cancer type 1. Default is 50.
+        N2 (int): The maximum number of samples to select for cancer type 2. Default is 50.
+        N3 (int): The maximum number of samples to select for cancer type 3. Default is 50.
+        exclude (list): List of patients to exclude initially. By default, it includes a list
+        of 9 patients who do not have the pre-contrast 3 sequence. Additional patients with
+        poor image quality can be included in this list for exclusion.
+        random_seed (int or None): Seed value for controlling the randomness of the function. Default is 42.
+        show_patients (bool): Whether to print the list of patients for each cancer type. Default is False.
+
+    Returns:
+        tuple: Four lists containing the random samples for each cancer type.
+
+    """
+    clinical_features = pd.read_csv(path)
+    label = clinical_features.iloc[2:, 26]
+    label = label.astype(int)
+    label = label.reset_index(drop=True)
+    list0 = []
+    list1 = []
+    list2 = []
+    list3 = []
+
+    for i in range(0, 4):
+        patients = (np.where(label == i)[0]) + 1
+
+        if show_patients:
+            print(f"\n\nThere are {len(patients)} patients diagnosed with cancer type {i}.")
+            print(f"The following patients have been identified for cancer type {i}:\n{patients}")
+
+        if i == 0:
+            N = min(N0, (label == 0).sum())
+        elif i == 1:
+            N = min(N1, (label == 1).sum())
+        elif i == 2:
+            N = min(N2, (label == 2).sum())
+        else:
+            N = min(N3, (label == 3).sum())
+
+        mask_ = np.isin(patients, exclude)
+        filtered_patients = patients[~mask_]
+        np.random.seed(random_seed)
+        random_patients = np.random.choice(filtered_patients, size=N, replace=False)
+        ls_ = (random_patients.tolist())
+        ls_ = sorted(ls_)
+
+        if i == 0:
+            list0.extend(ls_)
+        elif i == 1:
+            list1.extend(ls_)
+        elif i == 2:
+            list2.extend(ls_)
+        else:
+            list3.extend(ls_)
+
+    return list0, list1, list2, list3
+
+# Set the path to the clinical features file
+path =clinical_file_path
+# Call the function to generate random samples for each cancer type
 list0, list1, list2, list3 = random_sample_for_each_cancer_type(path)
 
 # Combine the first elements from each list into a single list
 list_ = list0 + list1 + list2 + list3
+print("The patinets in the sample are:",list_)
 
 # Print the length of the combined list
 print("The total sample size is:", len(list_))
 
 # Reading 12 datasets
 #Pre
-D1=pd.read_csv('extracted_features/Pre_Original.csv')
+D1=pd.read_csv(bc_mri_path+'/extracted_features/Pre_Original.csv')
 D1=D1.iloc[:,1:]
-D2=pd.read_csv('extracted_features/Pre_64.csv')
+D2=pd.read_csv(bc_mri_path+'/extracted_features/Pre_64.csv')
 D2=D2.iloc[:,1:]
-D3=pd.read_csv('extracted_features/Pre_32.csv')
+D3=pd.read_csv(bc_mri_path+'/extracted_features/Pre_32.csv')
 D3=D3.iloc[:,1:]
 #Post1
-D4=pd.read_csv('extracted_features/Post_1_Original.csv')
+D4=pd.read_csv(bc_mri_path+'/extracted_features/Post_1_Original.csv')
 D4=D4.iloc[:,1:]
-D5=pd.read_csv('extracted_features/Post_1_64.csv')
+D5=pd.read_csv(bc_mri_path+'/extracted_features/Post_1_64.csv')
 D5=D5.iloc[:,1:]
-D6=pd.read_csv('extracted_features/Post_1_32.csv')
+D6=pd.read_csv(bc_mri_path+'/extracted_features/Post_1_32.csv')
 D6=D6.iloc[:,1:]
 #Post2
-D7=pd.read_csv('extracted_features/Post_2_Original.csv')
+D7=pd.read_csv(bc_mri_path+'/extracted_features/Post_2_Original.csv')
 D7=D7.iloc[:,1:]
-D8=pd.read_csv('extracted_features/Post_2_64.csv')
+D8=pd.read_csv(bc_mri_path+'/extracted_features/Post_2_64.csv')
 D8=D8.iloc[:,1:]
-D9=pd.read_csv('extracted_features/Post_2_32.csv')
+D9=pd.read_csv(bc_mri_path+'/extracted_features/Post_2_32.csv')
 D9=D9.iloc[:,1:]
 #Post3
-D10=pd.read_csv('extracted_features/Post_3_Original.csv')
+D10=pd.read_csv(bc_mri_path+'/extracted_features/Post_3_Original.csv')
 D10=D10.iloc[:,1:]
-D11=pd.read_csv('extracted_features/Post_3_64.csv')
+D11=pd.read_csv(bc_mri_path+'/extracted_features/Post_3_64.csv')
 D11=D11.iloc[:,1:]
-D12=pd.read_csv('extracted_features/Post_3_32.csv')
+D12=pd.read_csv(bc_mri_path+'/extracted_features/Post_3_32.csv')
 D12=D12.iloc[:,1:]
 
 # Merging 12 datasets
 frames=[D1,D2,D3,D4,D5,D6,D7,D8,D9,D10,D11,D12]
 data= pd.concat(frames, axis=1,join='inner',ignore_index=True)
-display(data)
+#display(data)
 
 #missing values
 data.isnull().sum().sum()
@@ -272,7 +385,7 @@ def process_clinical_features_extract_labels(path):
 
     """
 
-    list0, list1, list2, list3 = random_sample_for_each_cancer_type(path)
+    # list0, list1, list2, list3 = random_sample_for_each_cancer_type(path)
     list_ = list0 + list1 + list2 + list3
     patinets_indices_in_sample = [x - 1 for x in list_]
     clinical_features = pd.read_csv(path)
@@ -314,7 +427,7 @@ def process_clinical_features_extract_labels(path):
 
     return df4, labels_in_sample
 
-selected_clinical_features, labels_in_sample= process_clinical_features_extract_labels('dataset/Clinical_and_Other_Features.csv')
+selected_clinical_features, labels_in_sample= process_clinical_features_extract_labels(csv_files_path+'/Clinical_and_Other_Features.csv')
 
 # Perform initial feature selection based on variance
 small_var_, low_variety_ = initial_feature_selection_var(selected_clinical_features)
@@ -353,9 +466,14 @@ frames = [df_1, df_2, df_3,df_4]
 # Concatenate the DataFrames horizontally with inner join
 D = pd.concat(frames, axis=1, join='inner', ignore_index=True)
 # Display the resulting DataFrame D
-display(D)
 # Save the DataFrame D to a CSV file named radiomics_clinical_featues_data
-D.to_csv('extracted_features/radiomics_clinical_features_data.csv', header=True)
-
+D.to_csv(bc_mri_path+'/extracted_features/radiomics_clinical_features_data.csv', header=True)
+D = pd.read_csv(bc_mri_path+'/extracted_features/radiomics_clinical_features_data.csv')
+#Remove the first column from the DataFrame
+D = D.iloc[:, 1:]
+#Display the updated DataFrame
+display(D)
+#Distribution of y
 u, c = np.unique(D.iloc[:,-1], return_counts=True)
-pd.Series(c, index=u)
+print("Distribution of y is:\n",pd.Series(c, index=u))
+
