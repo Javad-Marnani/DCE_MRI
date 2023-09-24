@@ -3,9 +3,11 @@
 #!pip install patool
 #!pip install pyunpack
 #!pip install pyfeats
+#!pip install openpyxl
 ##########################################################################################
 #####################################   IMPORTS    #######################################
-##########################################################################################
+########################
+# ##################################################################
 import os
 import re
 import math
@@ -26,7 +28,7 @@ import seaborn as sns
 from tqdm import tqdm
 from PIL import Image
 import scipy.io as sio
-import tensorflow as tf
+#import tensorflow as tf
 from scipy.stats import t
 from random import choice
 from statistics import mode
@@ -92,23 +94,47 @@ if _GPU:
 ##########################################################################################
 # current_path = os.path.dirname(os.path.abspath(__file__))
 current_path = os.getcwd()
-bc_mri_path = current_path + '/BC_MRI'
-dataset_path = bc_mri_path + '/dataset'
-csv_files_path = bc_mri_path + '/CSV_Files'
-samples_path = dataset_path + '/Duke-Breast-Cancer-MRI'
-clinical_file_path = csv_files_path + '/Clinical_and_Other_Features.csv'
-mapping_path = csv_files_path + '/Breast-Cancer-MRI-filepath_filename-mapping.csv'
-boxes_path = csv_files_path + '/Annotation_Boxes.csv'
+print("Current path is: ", current_path)
+bc_mri_path = current_path + r'\BC_MRI'
+dataset_path = bc_mri_path + r'\dataset'
+xlsx_csv_files_path = bc_mri_path + r'\xlsx_csv_files'
+samples_path = dataset_path + r'\Duke-Breast-Cancer-MRI'
 types = ['pre', 'post_1', 'post_2', 'post_3']
 
-directories_to_check = ["dataset", "extracted_features", "resized_images", "CSV_Files"]
+directories_to_check = ["dataset", "extracted_features", "resized_images", "xlsx_csv_files"]
 for folder in directories_to_check:
     folder_path = os.path.join(bc_mri_path, folder)
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
 
-print("Please ensure that you have placed four CSV files into the 'CSV_Files' directory before running the process.")
+print("Please ensure that you have placed four XLSX files into the 'xlsx_csv_files' directory before running the process.")
+# List of XLSX file paths
+xlsx_file_paths = [xlsx_csv_files_path+ r'\Breast-Cancer-MRI-filepath_filename-mapping.xlsx',
+                   xlsx_csv_files_path+ r'\Annotation_Boxes.xlsx',
+                   xlsx_csv_files_path+ r'\Clinical_and_Other_Features.xlsx',
+                   xlsx_csv_files_path+ r'\Imaging_Features.xlsx'
+]
+# Convert XLSX file paths to CSV file paths
+csv_file_paths = [path[:-4] + "csv" for path in xlsx_file_paths]
+# Iterate over the XLSX and CSV file paths
+for xlsx_file, csv_file in zip(xlsx_file_paths, csv_file_paths):
+    # Check if the CSV file already exists
+    if os.path.exists(csv_file):
+        # If the CSV file exists, skip this iteration
+        continue
 
+    # Read the XLSX file into a pandas DataFrame
+    data_frame = pd.read_excel(xlsx_file)
+
+    # Convert DataFrame to CSV format
+    csv_data = data_frame.to_csv(index=False)
+
+    # Write CSV data and save it in the target directory
+    with open(csv_file, "w") as file:
+        file.write(csv_data)
+clinical_file_path = xlsx_csv_files_path + r'\Clinical_and_Other_Features.csv'
+mapping_path = xlsx_csv_files_path + r'\Breast-Cancer-MRI-filepath_filename-mapping.csv'
+boxes_path = xlsx_csv_files_path + r'\Annotation_Boxes.csv'
 def random_sample_for_each_cancer_type(path, N0=2, N1=2, N2=2, N3=2,
                                       exclude=[103,164,253,258,282,700,728,801,893],
                                       random_seed =42, show_patients=False):
@@ -683,7 +709,10 @@ def crop_and_save_images(boxes_path,seq_type='pre',crop='original', label='pos',
 
         filename = f"img_{seq_type}_{i:04d}.png"
         output_path = os.path.join(output_directory, filename)
-        img_cropped.save(output_path,'png')
+        # Check if the folder already exists
+        if not os.path.exists(output_path):
+        # If the folder does not exist, save it
+          img_cropped.save(output_path, 'png')
         if show and (isinstance(show, int) and i < show):
             plt.show()
         else:
@@ -1004,25 +1033,27 @@ def feature_extraction(seq_type='pre',crop='original', threshold=25,s=3,label='p
     end=time.time()
     print("The elapsed time is:",end-start)
     return data
-
-for seq_type in tqdm(['pre','post_1','post_2','post_3']):
-    for crop in  tqdm(['original',32,64]):
-        print(f"Generating CSV file associated with sequence {seq_type} and crop {crop}")
-        #Obtain the data using the radiomics features
-        data=feature_extraction(seq_type,crop, threshold=25,s=3,label='pos')
-        D=pd.DataFrame(data=data)
-        # Select rows where all columns are zero (related to the slices that were not selected)
-        all_zeros = (D== 0).all(axis=1)
-        # Drop the rows where all columns are zero
-        D=D[~all_zeros]
-        print("Total number of missing values:",D.isnull().sum().sum())
-        # Write the data and save that as scv
-        filename = f"{bc_mri_path}/extracted_features/{seq_type.capitalize()}_{str(crop).capitalize()}.csv"
-        D.to_csv(filename, header=True)
-
+for seq_type in tqdm(['pre', 'post_1', 'post_2', 'post_3']):
+      for crop in tqdm(['original', 32, 64]):
+          print(f"Generating CSV file associated with sequence {seq_type} and crop {crop}")
+          # Check if the CSV file already exists
+          filename = f"{bc_mri_path}/extracted_features/{seq_type.capitalize()}_{str(crop).capitalize()}.csv"
+          if os.path.exists(filename):
+              # If the CSV file exists, skip this iteration
+              continue
+          # Obtain the data using the radiomics features
+          data = feature_extraction(seq_type, crop, threshold=25, s=3, label='pos')
+          D = pd.DataFrame(data=data)
+          # Select rows where all columns are zero (related to the slices that were not selected)
+          all_zeros = (D == 0).all(axis=1)
+          # Drop the rows where all columns are zero
+          D = D[~all_zeros]
+          print("Total number of missing values:", D.isnull().sum().sum())
+          # Write the data and save it as a CSV file
+          D.to_csv(filename, header=True)
 #Load the CSV file 'Pre_Original.csv' into a pandas DataFrame
 D = pd.read_csv(bc_mri_path+'/extracted_features/Pre_Original.csv')
 #Remove the first column from the DataFrame
 D = D.iloc[:, 1:]
 #Display the updated DataFrame
-D
+display(D)

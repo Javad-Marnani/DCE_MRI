@@ -9,6 +9,7 @@ import pyfeats
 import pydicom
 import patoolib
 import operator
+import mahotas
 import cv2 as cv
 import collections
 import numpy as np
@@ -17,27 +18,27 @@ import seaborn as sns
 from tqdm import tqdm
 from PIL import Image
 import scipy.io as sio
-import tensorflow as tf
+#import tensorflow as tf
 from scipy.stats import t
 from random import choice
 from statistics import mode
 from pyunpack import Archive
 import matplotlib.pyplot as plt
-from keras.models import Sequential
+#from keras.models import Sequential
 from platform import python_version
 import matplotlib.patches as patches
 from sklearn.decomposition import PCA
 from skimage.io import imsave, imread
 from sklearn.impute import KNNImputer
-from keras.callbacks import EarlyStopping
+#from keras.callbacks import EarlyStopping
 from IPython.display import Image, display
 from sklearn import datasets, metrics, svm
 from collections import Counter, defaultdict
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest
-from tensorflow.keras.utils import to_categorical
-from keras.layers import Dense, Activation, Dropout
+#from tensorflow.keras.utils import to_categorical
+#from keras.layers import Dense, Activation, Dropout
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.metrics import (
@@ -54,7 +55,6 @@ from pyfeats import (
     multilevel_binary_morphology_features, histogram, multiregion_histogram, amfm_features,
     dwt_features, gt_features, zernikes_moments, hu_moments, hog_features
 )
-
 
 ##########################################################################################
 ####################################   SETTINGS    #######################################
@@ -83,13 +83,14 @@ if _GPU:
 ##########################################################################################
 # current_path = os.path.dirname(os.path.abspath(__file__))
 current_path = os.getcwd()
-bc_mri_path = current_path + '/BC_MRI'
-dataset_path = bc_mri_path + '/dataset'
-csv_files_path = bc_mri_path + '/CSV_Files'
-samples_path = dataset_path + '/Duke-Breast-Cancer-MRI'
-clinical_file_path = csv_files_path + '/Clinical_and_Other_Features.csv'
-mapping_path = csv_files_path + '/Breast-Cancer-MRI-filepath_filename-mapping.csv'
-boxes_path = csv_files_path + '/Annotation_Boxes.csv'
+print("Current path is: ", current_path)
+bc_mri_path = current_path + r'\BC_MRI'
+dataset_path = bc_mri_path + r'\dataset'
+xlsx_csv_files_path = bc_mri_path + r'\xlsx_csv_files'
+samples_path = dataset_path + r'\Duke-Breast-Cancer-MRI'
+clinical_file_path = xlsx_csv_files_path + r'\Clinical_and_Other_Features.csv'
+mapping_path = xlsx_csv_files_path + r'\Breast-Cancer-MRI-filepath_filename-mapping.csv'
+boxes_path = xlsx_csv_files_path + r'\Annotation_Boxes.csv'
 types = ['pre', 'post_1', 'post_2', 'post_3']
 
 # Call the function to generate random samples for each cancer type
@@ -167,39 +168,39 @@ list0, list1, list2, list3 = random_sample_for_each_cancer_type(path)
 
 # Combine the first elements from each list into a single list
 list_ = list0 + list1 + list2 + list3
-print("The patinets in the sample are:",list_)
+print("The patients in the sample are:",list_)
 
 # Print the length of the combined list
 print("The total sample size is:", len(list_))
 
 # Reading 12 datasets
 #Pre
-D1=pd.read_csv(bc_mri_path+'/extracted_features/Pre_Original.csv')
+D1=pd.read_csv(bc_mri_path+r'\extracted_features\Pre_Original.csv')
 D1=D1.iloc[:,1:]
-D2=pd.read_csv(bc_mri_path+'/extracted_features/Pre_64.csv')
+D2=pd.read_csv(bc_mri_path+r'\extracted_features\Pre_64.csv')
 D2=D2.iloc[:,1:]
-D3=pd.read_csv(bc_mri_path+'/extracted_features/Pre_32.csv')
+D3=pd.read_csv(bc_mri_path+r'\extracted_features\Pre_32.csv')
 D3=D3.iloc[:,1:]
 #Post1
-D4=pd.read_csv(bc_mri_path+'/extracted_features/Post_1_Original.csv')
+D4=pd.read_csv(bc_mri_path+r'\extracted_features\Post_1_Original.csv')
 D4=D4.iloc[:,1:]
-D5=pd.read_csv(bc_mri_path+'/extracted_features/Post_1_64.csv')
+D5=pd.read_csv(bc_mri_path+r'\extracted_features\Post_1_64.csv')
 D5=D5.iloc[:,1:]
-D6=pd.read_csv(bc_mri_path+'/extracted_features/Post_1_32.csv')
+D6=pd.read_csv(bc_mri_path+r'\extracted_features\Post_1_32.csv')
 D6=D6.iloc[:,1:]
 #Post2
-D7=pd.read_csv(bc_mri_path+'/extracted_features/Post_2_Original.csv')
+D7=pd.read_csv(bc_mri_path+r'\extracted_features\Post_2_Original.csv')
 D7=D7.iloc[:,1:]
-D8=pd.read_csv(bc_mri_path+'/extracted_features/Post_2_64.csv')
+D8=pd.read_csv(bc_mri_path+r'\extracted_features\Post_2_64.csv')
 D8=D8.iloc[:,1:]
-D9=pd.read_csv(bc_mri_path+'/extracted_features/Post_2_32.csv')
+D9=pd.read_csv(bc_mri_path+r'\extracted_features\Post_2_32.csv')
 D9=D9.iloc[:,1:]
 #Post3
-D10=pd.read_csv(bc_mri_path+'/extracted_features/Post_3_Original.csv')
+D10=pd.read_csv(bc_mri_path+r'\extracted_features\Post_3_Original.csv')
 D10=D10.iloc[:,1:]
-D11=pd.read_csv(bc_mri_path+'/extracted_features/Post_3_64.csv')
+D11=pd.read_csv(bc_mri_path+r'\extracted_features\Post_3_64.csv')
 D11=D11.iloc[:,1:]
-D12=pd.read_csv(bc_mri_path+'/extracted_features/Post_3_32.csv')
+D12=pd.read_csv(bc_mri_path+r'\extracted_features\Post_3_32.csv')
 D12=D12.iloc[:,1:]
 
 # Merging 12 datasets
@@ -215,10 +216,10 @@ np.isinf(data).values.sum()
 
 #columns including missing values
 cols_with_nan_data=list(np.where(data.isna().any(axis=0))[0])
-print(cols_with_nan_data)
+print("Columns with missing values in the extracted features are:\n ",cols_with_nan_data)
 #columns including inf values
 cols_with_inf_data=list(data.columns[np.isinf(data).any()])
-print(cols_with_inf_data)
+print("Columns with infinite values in the extracted features are:\n ",cols_with_inf_data)
 
 def take_average(df):
     """
@@ -274,13 +275,13 @@ def initial_feature_selection_var(df, std=0.01, percentile=0.05, feature_stat=Fa
 
     for i in range(df.shape[1]):
         des = df.iloc[:, i].describe()
-        min_val = des[3]
-        mean = des[1]
-        max_val = des[7]
-        std_ = des[2]
+        min_val = des.iloc[3]
+        mean = des.iloc[1]
+        max_val = des.iloc[7]
+        std_ = des.iloc[2]
         p1 = df.iloc[:, i].quantile(percentile)
         p2 = df.iloc[:, i].quantile(1 - percentile)
-        q3 = des[6]
+        q3 = des.iloc[6]
 
         if std_ < std:
             small_var.append(i)
@@ -294,11 +295,11 @@ def initial_feature_selection_var(df, std=0.01, percentile=0.05, feature_stat=Fa
 # Perform initial feature selection based on variance
 small_var, low_variety = initial_feature_selection_var(dataa)
 # Print the column indices with small variance
-print(small_var)
-print(len(small_var))
+print("Columns with small variance in the extracted features are:\n",small_var)
+print("The number of columns with small variance in the extracted features is:",len(small_var))
 # Print the column indices with low variance
-print(low_variety)
-print(len(low_variety))
+print("Columns with low variety in the extracted features are:\n",low_variety)
+print("The number of columns with low variety in the extracted features is:",len(low_variety))
 
 def find_zero_variance_features(df):
     """
@@ -356,11 +357,11 @@ high_corr = initial_feature_selection_corr(dataa)
 
 # Combine lists of features with low variety, small variance, and high correlations
 red_features = low_variety + small_var + high_corr
-print("The total number of redundant features is:", len(red_features))
+print("The total number of redundant extracted features is:", len(red_features))
 
 # Get unique redundant features
 redun_features = [*set(red_features)]
-print("The number of unique redundant features is:", len(redun_features))
+print("The number of unique redundant extracted features is:", len(redun_features))
 
 # drop some redundant features
 radiomics_data=dataa.drop(dataa.columns[redun_features], axis=1, inplace=False)
@@ -392,10 +393,10 @@ def process_clinical_features_extract_labels(path):
     label = clinical_features.iloc[2:, 26]
     label = label.astype(int)
     label = label.reset_index(drop=True)
-
+    # In most cases, these columns primarily or entirely consist of string values, and their meaning or significance is unknown to me.
     columns_to_drop_redundant = [0, 7, 9, 15, 16, 23, 24, 25, 26, 27, 34, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
                                  58, 59, 61, 62, 63, 65, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81,
-                                 87, 92, 93, 94, 95, 96, 97, 98]
+                                 87, 92, 93, 94, 95, 96, 97]
 
     # Drop some redundant features at the very first
     df = clinical_features.drop(clinical_features.columns[columns_to_drop_redundant], axis=1)
@@ -427,16 +428,16 @@ def process_clinical_features_extract_labels(path):
 
     return df4, labels_in_sample
 
-selected_clinical_features, labels_in_sample= process_clinical_features_extract_labels(csv_files_path+'/Clinical_and_Other_Features.csv')
+selected_clinical_features, labels_in_sample= process_clinical_features_extract_labels(clinical_file_path)
 
 # Perform initial feature selection based on variance
 small_var_, low_variety_ = initial_feature_selection_var(selected_clinical_features)
 # Print the column indices with small variance
-print(small_var_)
-print(len(small_var_))
+print("Columns with small variance in the clinical features are:\n",small_var_)
+print("The number of columns with small variance in the clinical features is:",len(small_var_))
 # Print the column indices with low variance
-print(low_variety_)
-print(len(low_variety_))
+print("Columns with low variety in the clinical features are:\n",low_variety_)
+print("The number of columns with low variety in the clinical features is:",len(low_variety_))
 
 # Perform initial feature selection based on correlation
 high_corr_ = initial_feature_selection_corr(selected_clinical_features)
@@ -444,11 +445,11 @@ high_corr_
 
 # Combine lists of features with low variety, small variance, and high correlations
 red_features_ = low_variety_ + small_var_ + high_corr_
-print("The total number of redundant features is:", len(red_features_))
+print("The total number of redundant clinical features is:", len(red_features_))
 
 # Get unique redundant features
 redun_features_ = [*set(red_features_)]
-print("The number of unique redundant features is:", len(redun_features_))
+print("The number of unique redundant clinical features is:", len(redun_features_))
 
 clinical_features_data = selected_clinical_features.drop(selected_clinical_features.columns[redun_features_], axis=1, inplace=False).reset_index(drop=True)
 clinical_features_data

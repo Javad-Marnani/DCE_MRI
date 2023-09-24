@@ -9,6 +9,7 @@ import pyfeats
 import pydicom
 import patoolib
 import operator
+import mahotas
 import cv2 as cv
 import collections
 import numpy as np
@@ -17,27 +18,27 @@ import seaborn as sns
 from tqdm import tqdm
 from PIL import Image
 import scipy.io as sio
-import tensorflow as tf
+#import tensorflow as tf
 from scipy.stats import t
 from random import choice
 from statistics import mode
 from pyunpack import Archive
 import matplotlib.pyplot as plt
-from keras.models import Sequential
+#from keras.models import Sequential
 from platform import python_version
 import matplotlib.patches as patches
 from sklearn.decomposition import PCA
 from skimage.io import imsave, imread
 from sklearn.impute import KNNImputer
-from keras.callbacks import EarlyStopping
+#from keras.callbacks import EarlyStopping
 from IPython.display import Image, display
 from sklearn import datasets, metrics, svm
 from collections import Counter, defaultdict
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_selection import SelectKBest
-from tensorflow.keras.utils import to_categorical
-from keras.layers import Dense, Activation, Dropout
+#from tensorflow.keras.utils import to_categorical
+#from keras.layers import Dense, Activation, Dropout
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.metrics import (
@@ -54,7 +55,6 @@ from pyfeats import (
     multilevel_binary_morphology_features, histogram, multiregion_histogram, amfm_features,
     dwt_features, gt_features, zernikes_moments, hu_moments, hog_features
 )
-
 
 ##########################################################################################
 ####################################   SETTINGS    #######################################
@@ -83,11 +83,16 @@ if _GPU:
 ##########################################################################################
 # current_path = os.path.dirname(os.path.abspath(__file__))
 current_path = os.getcwd()
-bc_mri_path = current_path + '/BC_MRI'
-dataset_path = bc_mri_path + '/dataset'
-csv_files_path = bc_mri_path + '/CSV_Files'
-features_by_saha=csv_files_path + '/Imaging_Features.csv'
-clinical_file_path = csv_files_path + '/Clinical_and_Other_Features.csv'
+print("Current path is: ", current_path)
+bc_mri_path = current_path + r'\BC_MRI'
+dataset_path = bc_mri_path + r'\dataset'
+xlsx_csv_files_path = bc_mri_path + r'\xlsx_csv_files'
+samples_path = dataset_path + r'\Duke-Breast-Cancer-MRI'
+clinical_file_path = xlsx_csv_files_path + r'\Clinical_and_Other_Features.csv'
+mapping_path = xlsx_csv_files_path + r'\Breast-Cancer-MRI-filepath_filename-mapping.csv'
+boxes_path = xlsx_csv_files_path + r'\Annotation_Boxes.csv'
+radiomics_clinical_path=bc_mri_path+r'\extracted_features\radiomics_clinical_features_data.csv'
+features_by_saha=xlsx_csv_files_path + r'\Imaging_Features.csv'
 types = ['pre', 'post_1', 'post_2', 'post_3']
 
 d=pd.read_csv(features_by_saha)
@@ -135,13 +140,13 @@ def initial_feature_selection_var(df, std=0.01, percentile=0.05, feature_stat=Fa
 
     for i in range(df.shape[1]):
         des = df.iloc[:, i].describe()
-        min_val = des[3]
-        mean = des[1]
-        max_val = des[7]
-        std_ = des[2]
+        min_val = des.iloc[3]
+        mean = des.iloc[1]
+        max_val = des.iloc[7]
+        std_ = des.iloc[2]
         p1 = df.iloc[:, i].quantile(percentile)
         p2 = df.iloc[:, i].quantile(1 - percentile)
-        q3 = des[6]
+        q3 = des.iloc[6]
 
         if std_ < std:
             small_var.append(i)
@@ -379,6 +384,26 @@ def convert_label_one_vs_one(data, subtype_1, subtype_2):
 
     return X_i, Y_i
 
+def anova_feature_selection(X_train,y_train,X_test,n_features):
+    """
+    Perform ANOVA feature selection on the given datasets.
+
+    Args:
+        X_train (pd.DataFrame): Training dataset features.
+        y_train (pd.Series): Training dataset labels.
+        X_test (pd.DataFrame): Test dataset features.
+        n_features (int): Number of top features to select.
+
+    Returns:
+        tuple: A tuple containing the transformed training and test datasets.
+            - X_train_anov (pd.DataFrame): Transformed training dataset with the selected features.
+            - X_test_anov (pd.DataFrame): Transformed test dataset with the selected features.
+    """
+    best = SelectKBest(k=n_features)
+    fit_train = best.fit(X_train, y_train)
+    X_train_anov = best.transform(X_train)
+    X_test_anov = best.transform(X_test)
+    return X_train_anov, X_test_anov
 def evaluate_classifier(X, y, k_fold_cv=10, random_search_cv=5, n_iter=200,
                         max_features=150, classifier='None',n_neighbors_impute=10,n_neighbors_LOF=10,
                         hyperparameters=None,random_state=42):
@@ -426,13 +451,9 @@ def evaluate_classifier(X, y, k_fold_cv=10, random_search_cv=5, n_iter=200,
 
         # Loop for ANOVA feature selection
         for i in tqdm(range(1, max_features+1)):
-            f1 = make_scorer(f1_score, average='macro')
-            best = SelectKBest(k=i)
-            fit_train = best.fit(X_train_imputed, y_train)
-            X_train_anov = best.transform(X_train_imputed)
-            X_test_anov = best.transform(X_test_imputed)
-
-            lof = LocalOutlierFactor(n_neighbors=n_neighbors_LOF, contamination=0.0000001)
+            # Call the anova feature selection function
+            X_train_anov, X_test_anov = anova_feature_selection(X_train_imputed, y_train, X_test_imputed, n_features=i)
+            lof = LocalOutlierFactor(n_neighbors=n_neighbors_LOF, contamination='auto')
             y_pred_train = lof.fit_predict(X_train_anov)
             X_train_inliers = X_train_anov[y_pred_train == 1]
             y_train_inliers = y_train[y_pred_train == 1]
@@ -446,7 +467,7 @@ def evaluate_classifier(X, y, k_fold_cv=10, random_search_cv=5, n_iter=200,
             elif classifier == 'rf':
                 from sklearn.ensemble import RandomForestClassifier
                 classifier_obj = RandomForestClassifier()
-
+            f1 = make_scorer(f1_score, average='macro')
             Randomsearch = RandomizedSearchCV(classifier_obj, hyperparameters, cv=random_search_cv, n_iter=n_iter,
                                               scoring=f1,verbose=1, n_jobs=-1, random_state=42)
             Randomsearch.fit(X_train_inliers, y_train_inliers)
@@ -496,132 +517,107 @@ def evaluate_classifier(X, y, k_fold_cv=10, random_search_cv=5, n_iter=200,
         print("Report: \n",classification_report(y_train_inliers, train_prediction))
     return max_test_score, optimal_features, optimal_num_features, optimal_param
 
-# One vs. the rest classifications using svm
-classifier='svm'
-hyperparameters={'kernel':['linear','rbf','poly','sigmoid'],'C':[0.0001,0.001,0.01,0.05,0.25,0.5,1,5,10,
-                  20,30,45,55,60,80,100],'degree':[1,2],
-               'gamma':['scale','auto',0.001,0.005,0.01,0.03,0.10,0.30,0.50,0.60,0.75,1]}
-for i in tqdm(range(0,4)):
-    if i==0:
-        subtype='Luminal A'
-    elif i==1:
-        subtype='Luminal B'
-    elif i==2:
-        subtype='HER2+'
-    else:
-        subtype="TN"
-    print(subtype, "vs. the rest classification using",classifier)
-    X,Y= convert_label_one_vs_the_rest(data, i)
-    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X, Y, k_fold_cv=2, random_search_cv=2, n_iter=5,
-                        max_features=5, classifier=classifier, hyperparameters=hyperparameters,n_neighbors_impute=1,n_neighbors_LOF=1,
-                        random_state=42)
-    print('max_test_scores:\n',max_test_score)
-    print('optimal_features:\n',optimal_features)
-    print('optimal_num_features:\n',optimal_num_features)
-    print('optimal_param:\n',optimal_param)
-    #calling the functions
-    avg_mode = calculate_average_or_mode(optimal_param)
-    print("Average of numerical hyperparameters and mode of string hyperparameters across different runs:", avg_mode)
-    print("C.I for the mean of max_test_scores:\n")
-    confidence_interval(max_test_score)
-    print("C.I for the mean of optimal_num_features:\n")
-    confidence_interval(optimal_num_features)
+def one_vs_the_rest_classification(data, subtype, k_fold_cv=2, random_search_cv=2, n_iter=5,
+                        max_features=5, classifier='None',n_neighbors_impute=10,n_neighbors_LOF=10,
+                        hyperparameters=None,random_state=42):
+    """
+    Perform one-vs-the-rest classification using the provided functions.
 
-# One vs. the rest classifications using rf
-classifier='rf'
-hyperparameters={'criterion':['gini'],#, 'entropy'],
-                  'n_estimators':[5,10,20,50,70,200,500],
-                  'max_depth':[5,7,9,15,20,30],
-                  'min_samples_split':[2,3,4,5,6,7],
-                  'min_samples_leaf':[1,2,3,5],
-                  #'min_weight_fraction_leaf':[0,0.50],
-                  #'bootstrap':[True,False]
-                  }
-for i in tqdm(range(0,4)):
-    if i==0:
-        subtype='Luminal A'
-    elif i==1:
-        subtype='Luminal B'
-    elif i==2:
-        subtype='HER2+'
-    else:
-        subtype="TN"
-    print(subtype, "vs. the rest classification using",classifier)
-    X,Y= convert_label_one_vs_the_rest(data, i)
-    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X, Y, k_fold_cv=2, random_search_cv=2, n_iter=5,
-                        max_features=5, classifier=classifier, hyperparameters=hyperparameters,n_neighbors_impute=1,n_neighbors_LOF=1,
-                        random_state=42)
-    print('max_test_scores:\n',max_test_score)
-    print('optimal_features:\n',optimal_features)
-    print('optimal_num_features:\n',optimal_num_features)
-    print('optimal_param:\n',optimal_param)
-    #calling the functions
-    avg_mode = calculate_average_or_mode(optimal_param)
-    print("Average of numerical hyperparameters and mode of string hyperparameters across different runs:", avg_mode)
-    print("C.I for the mean of max_test_scores:\n")
-    confidence_interval(max_test_score)
-    print("C.I for the mean of optimal_num_features:\n")
-    confidence_interval(optimal_num_features)
+    Args:
+        data (pandas.DataFrame): The input data including features, patient numbers, and labels.
+        subtype (str or int): The subtype to determine the case of one-vs-the-rest classification. Can be a string ('Luminal A', 'Luminal B', 'HER2+', 'TN') or the corresponding integers (0, 1, 2, 3).
+        k_fold_cv (int, optional): The number of cross-validation folds. Defaults to 2.
+        random_search_cv (int, optional): The number of iterations for randomized search. Defaults to 2.
+        n_iter (int, optional): The number of iterations for randomized search. Defaults to 10.
+        max_features (int, optional): The maximum number of features to consider for feature selection. Defaults to 5.
+        classifier (str, optional): The classifier type. Must be 'svm' or 'rf'. Defaults to 'None'.
+        n_neighbors_impute (int, optional): The number of neighbors for KNN imputation. Defaults to 1.
+        n_neighbors_LOF (int, optional): The number of neighbors for Local Outlier Factor. Defaults to 1.
+        hyperparameters (dict, optional): Hyperparameters for the classifier. Defaults to None.
+        random_state (int, optional): Random state for reproducibility. Defaults to 42.
 
-# One vs. one classifications using svm
-classifier='svm'
-hyperparameters={'kernel':['linear','rbf','poly','sigmoid'],'C':[0.0001,0.001,0.01,0.05,0.25,0.5,1,5,10,
-                  20,30,45,55,60,80,100],'degree':[1,2],
-               'gamma':['scale','auto',0.001,0.005,0.01,0.03,0.10,0.30,0.50,0.60,0.75,1]}
-classification_cases = [('Luminal A', 'Luminal B'),
-                        ('Luminal A', 'HER2+'),
-                        ('Luminal A', 'TN'),
-                        ('Luminal B', 'HER2+'),
-                        ('Luminal B', 'TN'),
-                        ('HER2+', 'TN')]
-for subtype_1, subtype_2 in classification_cases:
-    print(subtype_1, "vs.",subtype_2,"classification using",classifier)
-    X,Y= convert_label_one_vs_one(data,subtype_1,subtype_2 )
-    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X, Y, k_fold_cv=2, random_search_cv=2, n_iter=5,
-                        max_features=5, classifier=classifier, hyperparameters=hyperparameters,n_neighbors_impute=1,n_neighbors_LOF=1,
-                        random_state=42)
-    print('max_test_scores:\n',max_test_score)
-    print('optimal_features:\n',optimal_features)
-    print('optimal_num_features:\n',optimal_num_features)
-    print('optimal_param:\n',optimal_param)
-    #calling the functions
-    avg_mode = calculate_average_or_mode(optimal_param)
-    print("Average of numerical hyperparameters and mode of string hyperparameters across different runs:", avg_mode)
-    print("C.I for the mean of max_test_scores:\n")
-    confidence_interval(max_test_score)
-    print("C.I for the mean of optimal_num_features:\n")
-    confidence_interval(optimal_num_features)
+    Returns:
+        None. Prints information regarding the chosen criteria, optimal hyperparameters, and number of features.
+    """
+    X, Y = convert_label_one_vs_the_rest(data, subtype)
+    max_test_score, optimal_features, optimal_num_features, optimal_param = evaluate_classifier(X, Y, k_fold_cv, random_search_cv, n_iter,
+                        max_features, classifier,n_neighbors_impute,n_neighbors_LOF,
+                        hyperparameters,random_state)
 
-# One vs. one classifications using rf
-classifier='rf'
-hyperparameters={'criterion':['gini'],#, 'entropy'],
-                  'n_estimators':[5,10,20,50,70,200,500],
-                  'max_depth':[5,7,9,15,20,30],
-                  'min_samples_split':[2,3,4,5,6,7],
-                  'min_samples_leaf':[1,2,3,5],
-                  #'min_weight_fraction_leaf':[0,0.50],
-                  #'bootstrap':[True,False]
-                  }
-classification_cases = [('Luminal A', 'Luminal B'),
-                        ('Luminal A', 'HER2+'),
-                        ('Luminal A', 'TN'),
-                        ('Luminal B', 'HER2+'),
-                        ('Luminal B', 'TN'),
-                        ('HER2+', 'TN')]
-for subtype_1, subtype_2 in classification_cases:
-    print(subtype_1, "vs.",subtype_2,"classification using",classifier)
-    X,Y= convert_label_one_vs_one(data,subtype_1,subtype_2 )
-    max_test_score,optimal_features,optimal_num_features,optimal_param =evaluate_classifier(X, Y, k_fold_cv=2, random_search_cv=2, n_iter=5,
-                        max_features=5, classifier=classifier, hyperparameters=hyperparameters,n_neighbors_impute=1,n_neighbors_LOF=1,
-                        random_state=42)
-    print('max_test_scores:\n',max_test_score)
-    print('optimal_features:\n',optimal_features)
-    print('optimal_num_features:\n',optimal_num_features)
-    print('optimal_param:\n',optimal_param)
-    #calling the functions
+    print('Max test scores:\n', max_test_score)
+    print('Optimal features:\n', optimal_features)
+    print('Optimal number of features:\n', optimal_num_features)
+    print('Optimal parameters:\n', optimal_param)
+
     avg_mode = calculate_average_or_mode(optimal_param)
     print("Average of numerical hyperparameters and mode of string hyperparameters across different runs:", avg_mode)
-    print("C.I for the mean of max_test_scores:\n")
+
+    print("Confidence Interval for the mean of max_test_scores:\n")
     confidence_interval(max_test_score)
-    print("C.I for the mean of optimal_num_features:\n")
+
+    print("Confidence Interval for the mean of optimal_num_features:\n")
     confidence_interval(optimal_num_features)
+#Generate a dictionary for hyperparameters. Please feel free to modify it based on the available resources you have.
+rf_parameters = {'criterion': ['gini'],  # , 'entropy'],
+                   'n_estimators': [5, 10, 20, 50, 70, 200, 500],
+                   # 'max_depth':[5,7,9,15,20,30],
+                   # 'min_samples_split':[2,3,4,5,6,7],
+                   # 'min_samples_leaf':[1,2,3,5],
+                   # 'min_weight_fraction_leaf':[0,0.50],
+                   # 'bootstrap':[True,False]
+                   }
+svm_parameters = {'kernel': ['linear', 'rbf', 'poly', 'sigmoid'],
+                   'C': [0.0001, 0.001, 0.01, 0.05, 0.25, 0.5, 1, 5, 10, 20, 30, 45, 55, 60, 80, 100],
+                   # 'degree':[1,2],
+                   # 'gamma':['scale','auto',0.001,0.005,0.01,0.03,0.10,0.30,0.50,0.60,0.75,1]
+                   }
+# Call the function
+one_vs_the_rest_classification(data, subtype='TN', classifier='rf', hyperparameters=rf_parameters)
+one_vs_the_rest_classification(data, subtype=1, classifier='svm', hyperparameters=svm_parameters)
+
+
+def one_vs_one_classification(data, subtype_1, subtype_2, k_fold_cv=2, random_search_cv=2, n_iter=5,
+                        max_features=5, classifier='None',n_neighbors_impute=10,n_neighbors_LOF=10,
+                        hyperparameters=None,random_state=42):
+    """
+    Perform one-vs-one classification using the provided functions.
+
+    Args:
+        data (pandas.DataFrame): The input data including features, patient numbers, and labels.
+        subtype_1 (int or str): First subtype, specified as either an integer or a string.
+        subtype_2 (int or str): Second subtype, specified as either an integer or a string.
+        ('Luminal A', 'Luminal B', 'HER2+', 'TN') or the corresponding integers (0, 1, 2, 3).
+        k_fold_cv (int, optional): The number of cross-validation folds. Defaults to 2.
+        random_search_cv (int, optional): The number of iterations for randomized search. Defaults to 2.
+        n_iter (int, optional): The number of iterations for randomized search. Defaults to 10.
+        max_features (int, optional): The maximum number of features to consider for feature selection. Defaults to 5.
+        classifier (str, optional): The classifier type. Must be 'svm' or 'rf'. Defaults to 'None'.
+        n_neighbors_impute (int, optional): The number of neighbors for KNN imputation. Defaults to 1.
+        n_neighbors_LOF (int, optional): The number of neighbors for Local Outlier Factor. Defaults to 1.
+        hyperparameters (dict, optional): Hyperparameters for the classifier. Defaults to None.
+        random_state (int, optional): Random state for reproducibility. Defaults to 42.
+
+    Returns:
+        None. Prints information regarding the chosen criteria, optimal hyperparameters, and number of features.
+    """
+    X, Y = convert_label_one_vs_one(data,subtype_1,subtype_2 )
+    max_test_score, optimal_features, optimal_num_features, optimal_param = evaluate_classifier(X, Y, k_fold_cv, random_search_cv, n_iter,
+                        max_features, classifier,n_neighbors_impute,n_neighbors_LOF,
+                        hyperparameters,random_state)
+
+    print('Max test scores:\n', max_test_score)
+    print('Optimal features:\n', optimal_features)
+    print('Optimal number of features:\n', optimal_num_features)
+    print('Optimal parameters:\n', optimal_param)
+
+    avg_mode = calculate_average_or_mode(optimal_param)
+    print("Average of numerical hyperparameters and mode of string hyperparameters across different runs:", avg_mode)
+
+    print("Confidence Interval for the mean of max_test_scores:\n")
+    confidence_interval(max_test_score)
+
+    print("Confidence Interval for the mean of optimal_num_features:\n")
+    confidence_interval(optimal_num_features)
+#Call the function
+one_vs_one_classification(data, subtype_1=0,subtype_2=3, classifier='rf', hyperparameters=rf_parameters)
+one_vs_one_classification(data, subtype_1='Luminal B',subtype_2='HER2+', classifier='svm', hyperparameters=svm_parameters)
