@@ -1,3 +1,7 @@
+# ##########################################################################################
+# #####################################   IMPORTS    #######################################
+# ########################
+# # ##################################################################
 import os
 import re
 import math
@@ -16,7 +20,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
-from PIL import Image
 import scipy.io as sio
 #import tensorflow as tf
 from scipy.stats import t
@@ -57,28 +60,6 @@ from pyfeats import (
 )
 
 ##########################################################################################
-####################################   SETTINGS    #######################################
-##########################################################################################
-_GPU = False
-
-##########################################################################################
-######################################   TEMP    #########################################
-##########################################################################################
-pd.set_option('display.max_columns', None)
-
-##########################################################################################
-#################################   SETTINGS EXEC    #####################################
-##########################################################################################
-'''Choose GPU 0 or 1 if they are available for processing.'''
-if _GPU:
-	physical_devices = tf.config.list_physical_devices('GPU')
-	tf.config.experimental.set_memory_growth(physical_devices[1], True)
-	tf.config.set_visible_devices(physical_devices[1], 'GPU')
-	visible_devices = tf.config.get_visible_devices('GPU')
-	print(visible_devices)
-
-
-##########################################################################################
 ################################   DIRECTORY HANDLER    ##################################
 ##########################################################################################
 # current_path = os.path.dirname(os.path.abspath(__file__))
@@ -88,173 +69,12 @@ bc_mri_path = current_path + r'\BC_MRI'
 dataset_path = bc_mri_path + r'\dataset'
 xlsx_csv_files_path = bc_mri_path + r'\xlsx_csv_files'
 samples_path = dataset_path + r'\Duke-Breast-Cancer-MRI'
+types = ['pre', 'post_1', 'post_2', 'post_3']
 clinical_file_path = xlsx_csv_files_path + r'\Clinical_and_Other_Features.csv'
 mapping_path = xlsx_csv_files_path + r'\Breast-Cancer-MRI-filepath_filename-mapping.csv'
 boxes_path = xlsx_csv_files_path + r'\Annotation_Boxes.csv'
 radiomics_clinical_path=bc_mri_path+r'\extracted_features\radiomics_clinical_features_data.csv'
 features_by_saha=xlsx_csv_files_path + r'\Imaging_Features.csv'
-types = ['pre', 'post_1', 'post_2', 'post_3']
-
-d=pd.read_csv(features_by_saha)
-d=d.iloc[:,1:]
-#display(d)
-
-#missing values
-print("missing values:",d.isnull().sum().sum())
-# inf values
-print("inf values:",np.isinf(d).values.sum())
-
-#total number of features
-f_total= d.shape[1]
-f_total
-
-X=d.iloc[:,0:f_total]
-X
-
-# Importing functions for initial feature selection
-#from Data_Preprocessing import initial_feature_selection_var, initial_feature_selection_corr
-
-def initial_feature_selection_var(df, std=0.01, percentile=0.05, feature_stat=False):
-    """
-    Perform initial feature selection based on variance and variety.
-
-    Parameters:
-        df (DataFrame): Input DataFrame containing the features.
-        std (float): Threshold value to determine low variance. Features with a standard
-            deviation below this threshold will be considered to have low variance.
-            Default is 0.01.
-        percentile (float): Percentile value used to determine low variety. Features with
-            a range (difference between the pth and (1-p)th percentiles) less than or equal
-            to this percentile will be considered to have low variety. Default is 0.05.
-        feature_stat (bool): Flag to determine whether to display the statistics (min, mean,
-            max, and standard deviation) for each feature. If True, the statistics will be
-            printed for each feature. Default is False.
-
-    Returns:
-        small_var (list): List of column indices corresponding to features with low variance.
-        low_variety (list): List of column indices corresponding to features with low variety.
-
-    """
-    small_var = []
-    low_variety = []
-
-    for i in range(df.shape[1]):
-        des = df.iloc[:, i].describe()
-        min_val = des.iloc[3]
-        mean = des.iloc[1]
-        max_val = des.iloc[7]
-        std_ = des.iloc[2]
-        p1 = df.iloc[:, i].quantile(percentile)
-        p2 = df.iloc[:, i].quantile(1 - percentile)
-        q3 = des.iloc[6]
-
-        if std_ < std:
-            small_var.append(i)
-        if p1 == p2:
-            low_variety.append(i)
-        if feature_stat:
-            print(i, "min:", min_val, "mean:", mean, "max:", max_val, "std:", std)
-
-    return small_var, low_variety
-
-# Perform initial feature selection based on variance
-small_var, low_variety = initial_feature_selection_var(X)
-# Print the column indices with small variance
-print(small_var)
-print(len(small_var))
-# Print the column indices with low variance
-print(low_variety)
-print(len(low_variety))
-
-# Perform initial feature selection based on correlation
-def initial_feature_selection_corr(df, corr=0.98, show=False):
-    """
-    Find pairs of features in the given data that have a strong correlation (greater than or equal to corr).
-
-    Parameters:
-        df (pd.DataFrame): Input data as a pandas DataFrame.
-        corr (float): Threshold value for defining strong correlation. Features with a correlation
-            greater than or equal to this value will be considered strongly correlated. Default is 0.98.
-        show (bool): Flag to determine whether to display the correlated pairs. If True, the correlated
-            pairs will be printed. Default is False.
-
-    Returns:
-        list: List of column indices representing features with strong correlations.
-
-    """
-    Cor = df.corr()
-    cnt = 0
-    str_cor = []
-
-    for i in range(0, df.shape[1]):
-        for j in range(i + 1, df.shape[1]):
-            if Cor.iloc[i, j] >= corr:
-                str_cor.append(j)
-                cnt += 1
-                if show:
-                    print(cnt, i, j, Cor.iloc[i, j])
-    # Get unique column indices with strong correlations
-    ind_cor = [*set(str_cor)]
-    return ind_cor
-
-high_corr = initial_feature_selection_corr(X)
-
-# Combine lists of features with low variety, small variance, and high correlations
-red_features = low_variety + small_var + high_corr
-print("The total number of redundant features is:", len(red_features))
-
-# Get unique redundant features
-redun_features = [*set(red_features)]
-print("The number of unique redundant features is:", len(redun_features))
-
-# drop some redundant features
-radiomics_data=X.drop(X.columns[redun_features], axis=1, inplace=False)
-radiomics_data
-
-#missing values
-print(radiomics_data.isnull().sum().sum())
-#infinit values
-print(np.isinf(radiomics_data).values.sum())
-
-#Using clinical_features file to extract the labels
-clinical_features=pd.read_csv(clinical_file_path)
-
-label=clinical_features.iloc[2:,26]
-label=label.astype(int)
-label=label.reset_index(drop=True)
-#print("label:",label)
-
-print("data shape:",radiomics_data.shape)
-print("label shape:",label.shape)
-
-patients_number=list(range(1, 923))
-patients_number=pd.DataFrame(patients_number)
-patients_number
-
-df_1=pd.DataFrame(data=radiomics_data)
-df_2=pd.DataFrame(data=patients_number)
-df_3=pd.DataFrame(data=label)
-frames=[df_1,df_2,df_3]
-data= pd.concat(frames, axis=1,join='inner',ignore_index=True)
-display(data)
-
-#Number of features
-f_num=data.shape[1]-2
-print("The number of features is:",f_num)
-
-X_=data.iloc[:,0:f_num]
-X_
-
-Y_=data.iloc[:,-1]
-Y_
-
-#Distribution of the data
-u_lab, c_lab = np.unique(Y_, return_counts=True)
-pd.Series(c_lab, index=u_lab)
-
-# Importing functions for classification
-#from Binary Classifications_OvR_OvO import confidence_interval, calculate_average_or_mode,convert_label_one_vs_the_rest
-#from Binary Classifications_OvR_OvO import convert_label_one_vs_one, evaluate_classifier
 def confidence_interval(vec, percent=0.90):
     """
     Analyze a vector by calculating the mean, standard deviation, and constructing a confidence interval.
@@ -319,6 +139,7 @@ def calculate_average_or_mode(data):
         result[key] = mode(value)
 
     return result
+
 def convert_label_one_vs_the_rest(data, subtype):
     """
     Convert the original labels into binary format (one vs. the rest) based on the specified subtype.
@@ -404,6 +225,7 @@ def anova_feature_selection(X_train,y_train,X_test,n_features):
     X_train_anov = best.transform(X_train)
     X_test_anov = best.transform(X_test)
     return X_train_anov, X_test_anov
+
 def evaluate_classifier(X, y, k_fold_cv=10, random_search_cv=5, n_iter=200,
                         max_features=150, classifier='None',n_neighbors_impute=10,n_neighbors_LOF=10,
                         hyperparameters=None,random_state=42):
@@ -452,7 +274,7 @@ def evaluate_classifier(X, y, k_fold_cv=10, random_search_cv=5, n_iter=200,
         # Loop for ANOVA feature selection
         for i in tqdm(range(1, max_features+1)):
             # Call the anova feature selection function
-            X_train_anov, X_test_anov = anova_feature_selection(X_train_imputed, y_train, X_test_imputed, n_features=i)
+            X_train_anov,X_test_anov=anova_feature_selection(X_train_imputed,y_train,X_test_imputed,n_features=i)
             lof = LocalOutlierFactor(n_neighbors=n_neighbors_LOF, contamination='auto')
             y_pred_train = lof.fit_predict(X_train_anov)
             X_train_inliers = X_train_anov[y_pred_train == 1]
@@ -517,8 +339,9 @@ def evaluate_classifier(X, y, k_fold_cv=10, random_search_cv=5, n_iter=200,
         print("Report: \n",classification_report(y_train_inliers, train_prediction))
     return max_test_score, optimal_features, optimal_num_features, optimal_param
 
+
 def one_vs_the_rest_classification(data, subtype, k_fold_cv=2, random_search_cv=2, n_iter=5,
-                        max_features=5, classifier='None',n_neighbors_impute=10,n_neighbors_LOF=10,
+                        max_features=5, classifier='None',n_neighbors_impute=1,n_neighbors_LOF=1,
                         hyperparameters=None,random_state=42):
     """
     Perform one-vs-the-rest classification using the provided functions.
@@ -557,27 +380,9 @@ def one_vs_the_rest_classification(data, subtype, k_fold_cv=2, random_search_cv=
 
     print("Confidence Interval for the mean of optimal_num_features:\n")
     confidence_interval(optimal_num_features)
-#Generate a dictionary for hyperparameters. Please feel free to modify it based on the available resources you have.
-rf_parameters = {'criterion': ['gini'],  # , 'entropy'],
-                   'n_estimators': [5, 10, 20, 50, 70, 200, 500],
-                   # 'max_depth':[5,7,9,15,20,30],
-                   # 'min_samples_split':[2,3,4,5,6,7],
-                   # 'min_samples_leaf':[1,2,3,5],
-                   # 'min_weight_fraction_leaf':[0,0.50],
-                   # 'bootstrap':[True,False]
-                   }
-svm_parameters = {'kernel': ['linear', 'rbf', 'poly', 'sigmoid'],
-                   'C': [0.0001, 0.001, 0.01, 0.05, 0.25, 0.5, 1, 5, 10, 20, 30, 45, 55, 60, 80, 100],
-                   # 'degree':[1,2],
-                   # 'gamma':['scale','auto',0.001,0.005,0.01,0.03,0.10,0.30,0.50,0.60,0.75,1]
-                   }
-# Call the function
-one_vs_the_rest_classification(data, subtype='TN', classifier='rf', hyperparameters=rf_parameters)
-one_vs_the_rest_classification(data, subtype=1, classifier='svm', hyperparameters=svm_parameters)
-
 
 def one_vs_one_classification(data, subtype_1, subtype_2, k_fold_cv=2, random_search_cv=2, n_iter=5,
-                        max_features=5, classifier='None',n_neighbors_impute=10,n_neighbors_LOF=10,
+                        max_features=5, classifier='None',n_neighbors_impute=1,n_neighbors_LOF=1,
                         hyperparameters=None,random_state=42):
     """
     Perform one-vs-one classification using the provided functions.
@@ -618,6 +423,3 @@ def one_vs_one_classification(data, subtype_1, subtype_2, k_fold_cv=2, random_se
 
     print("Confidence Interval for the mean of optimal_num_features:\n")
     confidence_interval(optimal_num_features)
-#Call the function
-one_vs_one_classification(data, subtype_1=0,subtype_2=3, classifier='rf', hyperparameters=rf_parameters)
-one_vs_one_classification(data, subtype_1='Luminal B',subtype_2='HER2+', classifier='svm', hyperparameters=svm_parameters)

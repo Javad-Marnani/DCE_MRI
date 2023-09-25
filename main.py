@@ -59,11 +59,12 @@ from pyfeats import (
     multilevel_binary_morphology_features, histogram, multiregion_histogram, amfm_features,
     dwt_features, gt_features, zernikes_moments, hu_moments, hog_features
 )
-from Functions import random_sample_for_each_cancer_type, filter_mapping_df,save_dcm_slice,process_mapping_df,image_filenames_plot_one_at_random,patients_number
-from Functions import subtype_frequency,count_patient_slices,process_paths,sort_slices,sort_paths,plot_cropped_images,crop_and_save_images,extract_pixels
-from Functions import plot_images,Include,threshold_segmentation,feature_extraction,take_average,initial_feature_selection_var,find_zero_variance_features
-from Functions import initial_feature_selection_corr,process_clinical_features_extract_labels,confidence_interval,calculate_average_or_mode,convert_label_one_vs_the_rest
-from Functions import convert_label_one_vs_one,anova_feature_selection,evaluate_classifier,one_vs_the_rest_classification,one_vs_one_classification
+from Images_Functions import random_sample_for_each_cancer_type, filter_mapping_df,save_dcm_slice,process_mapping_df,image_filenames_plot_one_at_random,patients_number
+from Images_Functions import subtype_frequency,count_patient_slices,process_paths,sort_slices,sort_paths,plot_cropped_images,crop_and_save_images,extract_pixels
+from Images_Functions import plot_images,Include,threshold_segmentation,feature_extraction
+from Data_Preprocessing_Functions import take_average,initial_feature_selection_var,find_zero_variance_features,initial_feature_selection_corr,process_clinical_features_extract_labels
+from Classification_Functions import confidence_interval,calculate_average_or_mode,convert_label_one_vs_the_rest,convert_label_one_vs_one
+from Classification_Functions import anova_feature_selection,evaluate_classifier,one_vs_the_rest_classification,one_vs_one_classification
 ##########################################################################################
 ####################################   SETTINGS    #######################################
 ##########################################################################################
