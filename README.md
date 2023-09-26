@@ -34,17 +34,17 @@ e) Imaging features (XLSX, 6.44 MB)
 
 7. Start with the `Feature_Extraction.py` file to extract 12 combinations of radiomics features. After obtaining the 12 CSV data files, proceed to run the other `.py` files in this order:
 
-   A) `Data_preprocessing.py`: Merge previous datasets, add some clinical features, and do some initial feature selection to get rid of redundant features before proceeding with machine learning algorithms.
+   A) `Data_Preprocessing.py`: Merge previous datasets, add some clinical features, and do some initial feature selection to get rid of redundant features before proceeding with machine learning algorithms.
    
-   B) `Binary Classifications_OvR_OvO.py`: Classify molecular subtypes of BC using two approaches:
+   B) `Binary_Classifications_OvR_OvO.py`: Classify molecular subtypes of BC using two approaches:
    
       - One vs. the rest classifications (4 OvR classifications)
       - One vs. one classifications (6 OvO classifications)
 
-   C) `Radiomics_Features_Saha_et.py`: Apply the same methodology for the extracted radiomics features by Saha et al. and make comparisons. [Saha et al. - British Journal of Cancer](https://www.nature.com/articles/s41416-018-0185-8)
+   C) `Radiomics_Features_Saha.py`: Apply the same methodology for the extracted radiomics features by Saha et al. and make comparisons. [Saha et al. - British Journal of Cancer](https://www.nature.com/articles/s41416-018-0185-8)
 
-8. Alternatively, you can run `main.py` instead of executing the four separate code files to achieve the same results. Although `main.py` offers simplicity in terms of execution, you may lose insight into the code flow and the underlying processes happening within different functions.
+8. Alternatively, you can run `main.py` instead of executing the four separate code files to achieve the same results. 
 
-9. In the current version, we are running the codes with a small sample of 8 patients for testing purposes, ensuring they can be executed locally without errors. To avoid potential issues, we have commented out some lines at the end of the `Binary Classifications_OvR_OvO.py` file. This is because the sample size of 8 is too small for meaningful classification purposes and may lead to errors with certain classifiers. When working with a larger sample size, feel free to uncomment these lines. Additionally, you may need to modify the arguments of the functions throughout the codes to suit your specific needs.
+9. In the current version, we are running the codes with a small sample of 8 patients for testing purposes, ensuring they can be executed locally without errors. To avoid potential issues, we have commented out some lines at the end of the `Binary_Classifications_OvR_OvO.py` file. This is because the sample size of 8 is too small for meaningful classification purposes and may lead to errors with certain classifiers. When working with a larger sample size, feel free to uncomment these lines. Additionally, you may need to modify the arguments of the functions throughout the codes to suit your specific needs.
 
 10. Please be aware that if you plan to change the samples, it is crucial to delete the existing contents of the `dataset`, `resized_images`, and `extracted_features` directories. These directories will not automatically update their contents with each run, and if any files already exist within them, the results may not accurately reflect the new patient's samples. To ensure precise results, it is necessary to manually remove the previous contents before proceeding with new samples. 
