@@ -1,7 +1,6 @@
-# ##########################################################################################
-# #####################################   IMPORTS    #######################################
-# ########################
-# # ##################################################################
+##########################################################################################
+#####################################   IMPORTS    #######################################
+##########################################################################################
 import os
 import re
 import math
@@ -58,23 +57,11 @@ from pyfeats import (
     multilevel_binary_morphology_features, histogram, multiregion_histogram, amfm_features,
     dwt_features, gt_features, zernikes_moments, hu_moments, hog_features
 )
+from Path_Functions import path_provider,covert_xlsx_to_csv
 
-##########################################################################################
-################################   DIRECTORY HANDLER    ##################################
-##########################################################################################
-# current_path = os.path.dirname(os.path.abspath(__file__))
-current_path = os.getcwd()
-print("Current path is: ", current_path)
-bc_mri_path = current_path + r'\BC_MRI'
-dataset_path = bc_mri_path + r'\dataset'
-xlsx_csv_files_path = bc_mri_path + r'\xlsx_csv_files'
-samples_path = dataset_path + r'\Duke-Breast-Cancer-MRI'
+current_path,bc_mri_path,dataset_path,xlsx_csv_files_path,samples_path,clinical_file_path,mapping_path,boxes_path,radiomics_clinical_path,features_by_saha=path_provider()
 types = ['pre', 'post_1', 'post_2', 'post_3']
-clinical_file_path = xlsx_csv_files_path + r'\Clinical_and_Other_Features.csv'
-mapping_path = xlsx_csv_files_path + r'\Breast-Cancer-MRI-filepath_filename-mapping.csv'
-boxes_path = xlsx_csv_files_path + r'\Annotation_Boxes.csv'
-radiomics_clinical_path=bc_mri_path+r'\extracted_features\radiomics_clinical_features_data.csv'
-features_by_saha=xlsx_csv_files_path + r'\Imaging_Features.csv'
+
 def random_sample_for_each_cancer_type(path, N0=2, N1=2, N2=2, N3=2,
                                       exclude=[103,164,253,258,282,700,728,801,893],
                                       random_seed =42, show_patients=False):

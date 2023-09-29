@@ -1,67 +1,15 @@
 ##########################################################################################
 #####################################   IMPORTS    #######################################
-########################
-# ##################################################################
+##########################################################################################
 import os
-import re
-import math
-import time
-import glob
-import random
-import sklearn
-import pyfeats
-import pydicom
-import patoolib
-import operator
-import mahotas
-import cv2 as cv
-import collections
-import numpy as np
 import pandas as pd
-import seaborn as sns
+import numpy as np
 from tqdm import tqdm
-from PIL import Image
-import scipy.io as sio
 #import tensorflow as tf
-from scipy.stats import t
-from random import choice
-from statistics import mode
-from pyunpack import Archive
-import matplotlib.pyplot as plt
-#from keras.models import Sequential
-from platform import python_version
-import matplotlib.patches as patches
-from sklearn.decomposition import PCA
-from skimage.io import imsave, imread
-from sklearn.impute import KNNImputer
-#from keras.callbacks import EarlyStopping
-from IPython.display import Image, display
-from sklearn import datasets, metrics, svm
-from collections import Counter, defaultdict
-from sklearn.neighbors import LocalOutlierFactor
-from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import SelectKBest
-#from tensorflow.keras.utils import to_categorical
-#from keras.layers import Dense, Activation, Dropout
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import RandomizedSearchCV
-from sklearn.metrics import (
-    f1_score, make_scorer, confusion_matrix, accuracy_score, classification_report,
-    precision_score, recall_score, average_precision_score
-)
-from sklearn.model_selection import (
-    GridSearchCV, validation_curve, train_test_split, KFold, cross_val_score,
-    StratifiedKFold
-)
-from pyfeats import (
-    fos, glcm_features, glds_features, ngtdm_features, sfm_features, lte_measures, fdta, glrlm_features,
-    fps, shape_parameters, glszm_features, hos_features, lbp_features, grayscale_morphology_features,
-    multilevel_binary_morphology_features, histogram, multiregion_histogram, amfm_features,
-    dwt_features, gt_features, zernikes_moments, hu_moments, hog_features
-)
 from Images_Functions import random_sample_for_each_cancer_type
 from Classification_Functions import confidence_interval,calculate_average_or_mode,convert_label_one_vs_the_rest,convert_label_one_vs_one
 from Classification_Functions import anova_feature_selection,evaluate_classifier,one_vs_the_rest_classification,one_vs_one_classification
+from Path_Functions import path_provider,covert_xlsx_to_csv
 ##########################################################################################
 ####################################   SETTINGS    #######################################
 ##########################################################################################
@@ -73,34 +21,23 @@ _GPU = False
 pd.set_option('display.max_columns', None)
 
 ##########################################################################################
-#################################   SETTINGS EXEC    #####################################
+#################################   GPU CONFIGURATION AND SELECTION    #####################################
 ##########################################################################################
 '''Choose GPU 0 or 1 if they are available for processing.'''
 if _GPU:
-	physical_devices = tf.config.list_physical_devices('GPU')
-	tf.config.experimental.set_memory_growth(physical_devices[1], True)
-	tf.config.set_visible_devices(physical_devices[1], 'GPU')
-	visible_devices = tf.config.get_visible_devices('GPU')
-	print(visible_devices)
-
+  physical_devices = tf.config.list_physical_devices('GPU')
+  tf.config.experimental.set_memory_growth(physical_devices[1], True)
+  tf.config.set_visible_devices(physical_devices[1], 'GPU')
+  visible_devices = tf.config.get_visible_devices('GPU')
+  print(visible_devices)
 
 ##########################################################################################
-################################   DIRECTORY HANDLER    ##################################
+#################################   Binary_Classifications_OvR_OvO    #####################################
 ##########################################################################################
-# current_path = os.path.dirname(os.path.abspath(__file__))
-current_path = os.getcwd()
-print("Current path is: ", current_path)
-bc_mri_path = current_path + r'\BC_MRI'
-dataset_path = bc_mri_path + r'\dataset'
-xlsx_csv_files_path = bc_mri_path + r'\xlsx_csv_files'
-samples_path = dataset_path + r'\Duke-Breast-Cancer-MRI'
-clinical_file_path = xlsx_csv_files_path + r'\Clinical_and_Other_Features.csv'
-mapping_path = xlsx_csv_files_path + r'\Breast-Cancer-MRI-filepath_filename-mapping.csv'
-boxes_path = xlsx_csv_files_path + r'\Annotation_Boxes.csv'
-radiomics_clinical_path=bc_mri_path+r'\extracted_features\radiomics_clinical_features_data.csv'
-features_by_saha=xlsx_csv_files_path + r'\Imaging_Features.csv'
-types = ['pre', 'post_1', 'post_2', 'post_3']
-def Binary_Classifications_OvR_OvO ():
+
+def Binary_Classifications_OvR_OvO():
+  current_path,bc_mri_path,dataset_path,xlsx_csv_files_path,samples_path,clinical_file_path,mapping_path,boxes_path,radiomics_clinical_path,features_by_saha=path_provider()
+  types = ['pre', 'post_1', 'post_2', 'post_3']
   # Call the function to generate random samples for each cancer type
   global list0, list1, list2, list3
   list0, list1, list2, list3 = random_sample_for_each_cancer_type(clinical_file_path)
@@ -158,4 +95,5 @@ def Binary_Classifications_OvR_OvO ():
   print('- - - - - - - - - - - - - - - - BINARY CLASSIFICATION DONE  - - - - - - - - - - - - - - - -')
   print('- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -')
 
-Binary_Classifications_OvR_OvO()
+if __name__ == '__main__':
+  Binary_Classifications_OvR_OvO()
